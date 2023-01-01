@@ -58,16 +58,17 @@ A warning is issued if it can't be found on loading."
 If nil, use default-directory. If set to a function, evaluate
 that function. If set to a string, use that directory.")
 
-(defvar rg-capf-buffer-name "*rg-capf*")
+(defvar rg-capf-error-buffer-name "*rg-capf errors*")
+(defvar rg-capf-symbol-characters "[:alnum:]_-")
 
 (defvar rg-capf--process nil)
 
-(defun rg-capf--kill-process ()
+(defun rg-capf--kill-process (process)
   "Kill running process as safely as possible."
-  (when (and rg-capf--process
-             (eq (process-status rg-capf--process) 'run))
-    (interrupt-process rg-capf--process)
-    (kill-process rg-capf--process)))
+  (when (and process
+             (eq (process-status process) 'run))
+    (interrupt-process process)
+    (kill-process process)))
 
 (defun rg-capf--command (prefix)
   (concat
@@ -75,12 +76,13 @@ that function. If set to a string, use that directory.")
     rg-capf--rg-executable)
    " --ignore-case --only-matching --no-filename --no-line-number "
    (shell-quote-argument
-    (concat "(^|\\s|\\.)" prefix "([\\w_-]|::)*"))
+    (concat "(^|[^" rg-capf-symbol-characters "])" prefix "([" rg-capf-symbol-characters "]|::)*"))
    ;; Specify a directory to prevent rg from searching stdin
    " ."
-   " | awk '{print $1}' | sed 's/^\\.//' | sort | uniq -c | sort -rn | awk '{print $2}'"))
+   " | awk '{print $1}' | sed " (shell-quote-argument (concat "s/^[^" rg-capf-symbol-characters "]//"))
+   " | sort | uniq -c | sort -rn | awk '{print $2}'"))
 
-
+;; zim zimmy zimii zimmmms
 (defun rg-capf--directory ()
   (or
    (if (functionp rg-capf-directory)
@@ -88,15 +90,9 @@ that function. If set to a string, use that directory.")
      rg-capf-directory)
    default-directory))
 
-;; ## Show buffer on failing exit status
-(defun rg-capf--handle-signal (process _event)
-  (when (memq (process-status process) '(signal exit))
-    (setq rg-capf--process nil)
-    ))
-
 (defun rg-capf--accept-output (process output)
   "Receive output into a process property"
-  (push output (process-get process 'output)))
+  (push output (process-get process 'rg-capf-output)))
 
 (defun rg-capf--parse-output (output)
   (split-string output "\n"))
@@ -104,39 +100,45 @@ that function. If set to a string, use that directory.")
 (defun rg-capf--get-output (process)
   "Get the complete output of PROCESS."
   (with-demoted-errors "Error while retrieving process output: %S"
-    (let ((output (process-get process 'output)))
+    (let ((output (process-get process 'rg-capf-output)))
       (apply #'concat (nreverse output)))))
 
 (defun rg-capf--create-error-buffer ()
   "Get an empty error buffer."
-  (let ((error-buffer (get-buffer-create rg-capf-buffer-name)))
+  (let ((error-buffer (get-buffer-create rg-capf-error-buffer-name)))
     (with-current-buffer error-buffer
       (erase-buffer))
     error-buffer))
 
-(defun rg-capf--completions (prefix)
-  (rg-capf--kill-process)
-  (let* ((default-directory (rg-capf--directory))
-         (command (rg-capf--command prefix))
-         (buffer (rg-capf--create-error-buffer))
-         (process (make-process
-                   :name "rg-capf"
-                   ;; ## I may not need this buffer, I attempted to check exit status,
-                   ;; but rg exits with status 1 if it fails to find a match. I probably
-                   ;; just need to check if stderr is written to, which means I need a
-                   ;; stderr buffer only (unless this buffer is how I'm going to get my matches)
-                   :buffer nil
-                   :stderr buffer
-                   :connection-type 'pipe
-                   :noquery t
-                   :command (list shell-file-name shell-command-switch command)
-                   :sentinel #'rg-capf--handle-signal
-                   :filter #'rg-capf--accept-output)))
-    (setq rg-capf--process process)
-    ;; ## Enable timeout - Aaron, Sun Jan 01 2023
-    ;; (run-with-timer rg-capf-timeout-seconds nil
-    ;;                 'rg-capf--kill-process)
+(defun rg-capf--process (prefix)
+  (let ((current-prefix (and rg-capf--process
+                             (process-get rg-capf--process 'rg-capf-prefix))))
+    (if (and current-prefix
+             (string-prefix-p current-prefix prefix))
+        rg-capf--process
+      (rg-capf--kill-process rg-capf--process)
+      (let* ((default-directory (rg-capf--directory))
+             (command (rg-capf--command prefix))
+             (error-buffer (rg-capf--create-error-buffer))
+             (process
+              (make-process :name "rg-capf"
+                            :buffer nil
+                            :stderr error-buffer
+                            :connection-type 'pipe
+                            :noquery t
+                            :command (list shell-file-name shell-command-switch command)
+                            :filter #'rg-capf--accept-output)))
 
+        (setq rg-capf--process process)
+        (process-put process 'rg-capf-prefix prefix)
+
+        (run-with-timer rg-capf-timeout-seconds nil
+                        'rg-capf--kill-process process)
+
+        process))))
+
+(defun rg-capf--completions (prefix)
+  (let ((process (rg-capf--process prefix)))
     (while (process-live-p process)
       (sit-for 0.005))
 
@@ -145,8 +147,7 @@ that function. If set to a string, use that directory.")
         (rg-capf--parse-output output)))))
 
 (defun rg-capf ()
-  ;; ## Doc string - Aaron, Sun Jan 01 2023
-  ""
+  "Completion function that uses ripgrep for `completion-at-point-functions'"
   (save-excursion
     (when (thing-at-point-looking-at "\\(?:\\sw\\|\\s_\\)+")
       (let ((beg (match-beginning 0))
