@@ -143,6 +143,7 @@ that function. If set to a string, use that directory.")
       (let ((output (ripgrep-capf--get-output process)))
         (ripgrep-capf--parse-output output)))))
 
+;;;###autoload
 (defun ripgrep-capf ()
   "Completion function that uses ripgrep for `completion-at-point-functions'"
   (save-excursion
