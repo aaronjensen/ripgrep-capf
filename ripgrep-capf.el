@@ -1,9 +1,9 @@
-;;; rg-capf.el --- rg completion-at-point function -*- lexical-binding: t -*-
+;;; ripgrep-capf.el --- rg completion-at-point function -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2023 Aaron Jensen
 
 ;; Author: Aaron Jensen
-;; URL: https://github.com/aaronjensen/rg-capf
+;; URL: https://github.com/aaronjensen/ripgrep-capf
 ;;
 ;; Version: 1.0
 ;; Keywords: company
@@ -30,123 +30,122 @@
 
 ;;; Code:
 
-(defgroup rg-capf ()
+(defgroup ripgrep-capf ()
   "Rg completion-at-point function."
   :group 'convenience
-  :prefix "rg-capf")
+  :prefix "ripgrep-capf")
 
 ;; ## Reconsider whether or not I want to use executable-find or just set it to
 ;; ## "rg" by default - Aaron, Sat Dec 31 2022
-(defcustom rg-capf--rg-executable
+(defcustom ripgrep-capf--rg-executable
   (if-let ((executable (executable-find "rg")))
       executable
     (warn "No rg executable found in PATH.")
     "rg")
   "The PATH of the `rg' executable.
 A warning is issued if it can't be found on loading."
-  :group 'rg-capf
+  :group 'ripgrep-capf
   :type 'string)
 
-(defcustom rg-capf-timeout-seconds 0.75
+(defcustom ripgrep-capf-timeout-seconds 0.75
   "Timeout for rg, the process will be killed if it runs longer."
-  :group 'rg-capf
+  :group 'ripgrep-capf
   :type 'float)
 
-(defvar rg-capf-directory nil
+(defvar ripgrep-capf-directory nil
   "Default directory used when runing rg
 
 If nil, use default-directory. If set to a function, evaluate
 that function. If set to a string, use that directory.")
 
-(defvar rg-capf-error-buffer-name "*rg-capf errors*")
-(defvar rg-capf-symbol-characters "[:alnum:]_-")
+(defvar ripgrep-capf-error-buffer-name "*ripgrep-capf errors*")
+(defvar ripgrep-capf-symbol-characters "[:alnum:]_-")
 
-(defvar rg-capf--process nil)
+(defvar ripgrep-capf--process nil)
 
-(defun rg-capf--kill-process (process)
+(defun ripgrep-capf--kill-process (process)
   "Kill running process as safely as possible."
   (when (and process
              (eq (process-status process) 'run))
     (interrupt-process process)
     (kill-process process)))
 
-(defun rg-capf--command (prefix)
+(defun ripgrep-capf--command (prefix)
   (concat
    (shell-quote-argument
-    rg-capf--rg-executable)
+    ripgrep-capf--rg-executable)
    " --ignore-case --only-matching --no-filename --no-line-number "
    (shell-quote-argument
-    (concat "(^|[^" rg-capf-symbol-characters "])" prefix "([" rg-capf-symbol-characters "]|::)*"))
+    (concat "(^|[^" ripgrep-capf-symbol-characters "])" prefix "([" ripgrep-capf-symbol-characters "]|::)*"))
    ;; Specify a directory to prevent rg from searching stdin
    " ."
-   " | awk '{print $1}' | sed " (shell-quote-argument (concat "s/^[^" rg-capf-symbol-characters "]//"))
+   " | awk '{print $1}' | sed " (shell-quote-argument (concat "s/^[^" ripgrep-capf-symbol-characters "]//"))
    " | sort | uniq -c | sort -rn | awk '{print $2}'"))
 
-;; zim zimmy zimii zimmmms
-(defun rg-capf--directory ()
+(defun ripgrep-capf--directory ()
   (or
-   (if (functionp rg-capf-directory)
-       (funcall rg-capf-directory)
-     rg-capf-directory)
+   (if (functionp ripgrep-capf-directory)
+       (funcall ripgrep-capf-directory)
+     ripgrep-capf-directory)
    default-directory))
 
-(defun rg-capf--accept-output (process output)
+(defun ripgrep-capf--accept-output (process output)
   "Receive output into a process property"
-  (push output (process-get process 'rg-capf-output)))
+  (push output (process-get process 'ripgrep-capf-output)))
 
-(defun rg-capf--parse-output (output)
+(defun ripgrep-capf--parse-output (output)
   (split-string output "\n"))
 
-(defun rg-capf--get-output (process)
+(defun ripgrep-capf--get-output (process)
   "Get the complete output of PROCESS."
   (with-demoted-errors "Error while retrieving process output: %S"
-    (let ((output (process-get process 'rg-capf-output)))
+    (let ((output (process-get process 'ripgrep-capf-output)))
       (apply #'concat (nreverse output)))))
 
-(defun rg-capf--create-error-buffer ()
+(defun ripgrep-capf--create-error-buffer ()
   "Get an empty error buffer."
-  (let ((error-buffer (get-buffer-create rg-capf-error-buffer-name)))
+  (let ((error-buffer (get-buffer-create ripgrep-capf-error-buffer-name)))
     (with-current-buffer error-buffer
       (erase-buffer))
     error-buffer))
 
-(defun rg-capf--process (prefix)
-  (let ((current-prefix (and rg-capf--process
-                             (process-get rg-capf--process 'rg-capf-prefix))))
+(defun ripgrep-capf--process (prefix)
+  (let ((current-prefix (and ripgrep-capf--process
+                             (process-get ripgrep-capf--process 'ripgrep-capf-prefix))))
     (if (and current-prefix
              (string-prefix-p current-prefix prefix))
-        rg-capf--process
-      (rg-capf--kill-process rg-capf--process)
-      (let* ((default-directory (rg-capf--directory))
-             (command (rg-capf--command prefix))
-             (error-buffer (rg-capf--create-error-buffer))
+        ripgrep-capf--process
+      (ripgrep-capf--kill-process ripgrep-capf--process)
+      (let* ((default-directory (ripgrep-capf--directory))
+             (command (ripgrep-capf--command prefix))
+             (error-buffer (ripgrep-capf--create-error-buffer))
              (process
-              (make-process :name "rg-capf"
+              (make-process :name "ripgrep-capf"
                             :buffer nil
                             :stderr error-buffer
                             :connection-type 'pipe
                             :noquery t
                             :command (list shell-file-name shell-command-switch command)
-                            :filter #'rg-capf--accept-output)))
+                            :filter #'ripgrep-capf--accept-output)))
 
-        (setq rg-capf--process process)
-        (process-put process 'rg-capf-prefix prefix)
+        (setq ripgrep-capf--process process)
+        (process-put process 'ripgrep-capf-prefix prefix)
 
-        (run-with-timer rg-capf-timeout-seconds nil
-                        'rg-capf--kill-process process)
+        (run-with-timer ripgrep-capf-timeout-seconds nil
+                        'ripgrep-capf--kill-process process)
 
         process))))
 
-(defun rg-capf--completions (prefix)
-  (let ((process (rg-capf--process prefix)))
+(defun ripgrep-capf--completions (prefix)
+  (let ((process (ripgrep-capf--process prefix)))
     (while (process-live-p process)
       (sit-for 0.005))
 
     (when (eq (process-status process) 'exit)
-      (let ((output (rg-capf--get-output process)))
-        (rg-capf--parse-output output)))))
+      (let ((output (ripgrep-capf--get-output process)))
+        (ripgrep-capf--parse-output output)))))
 
-(defun rg-capf ()
+(defun ripgrep-capf ()
   "Completion function that uses ripgrep for `completion-at-point-functions'"
   (save-excursion
     (when (thing-at-point-looking-at "\\(?:\\sw\\|\\s_\\)+")
@@ -155,8 +154,8 @@ that function. If set to a string, use that directory.")
             (prefix (match-string 0)))
         (list beg
               end
-              (rg-capf--completions prefix)
+              (ripgrep-capf--completions prefix)
               :exclusive 'no)))))
 
-(provide 'rg-capf)
-;;; rg-capf.el ends here
+(provide 'ripgrep-capf)
+;;; ripgrep-capf.el ends here
