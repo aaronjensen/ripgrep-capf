@@ -137,7 +137,7 @@ that function. If set to a string, use that directory.")
 (defun ripgrep-capf--completions (prefix)
   (let ((process (ripgrep-capf--process prefix)))
     (while (process-live-p process)
-      (sit-for 0.005))
+      (sit-for 0.001))
 
     (when (eq (process-status process) 'exit)
       (let ((output (ripgrep-capf--get-output process)))
