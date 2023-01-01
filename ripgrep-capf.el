@@ -35,8 +35,6 @@
   :group 'convenience
   :prefix "ripgrep-capf")
 
-;; ## Reconsider whether or not I want to use executable-find or just set it to
-;; ## "rg" by default - Aaron, Sat Dec 31 2022
 (defcustom ripgrep-capf--rg-executable
   (if-let ((executable (executable-find "rg")))
       executable
@@ -76,6 +74,7 @@ that function. If set to a string, use that directory.")
     ripgrep-capf--rg-executable)
    " --ignore-case --only-matching --no-filename --no-line-number --replace '$1' --regexp "
    (shell-quote-argument
+    ;; ## The :: is a hack for Ruby, it should be made more configurable - Aaron, Sun Jan 01 2023
     (concat "(?:^|[^" ripgrep-capf-symbol-characters "])(" prefix "(:?[" ripgrep-capf-symbol-characters "]|::)*)"))
    ;; Specify a directory to prevent rg from searching stdin
    " ."
