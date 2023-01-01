@@ -74,12 +74,11 @@ that function. If set to a string, use that directory.")
   (concat
    (shell-quote-argument
     ripgrep-capf--rg-executable)
-   " --ignore-case --only-matching --no-filename --no-line-number "
+   " --ignore-case --only-matching --no-filename --no-line-number --replace '$1' --regexp "
    (shell-quote-argument
-    (concat "(^|[^" ripgrep-capf-symbol-characters "])" prefix "([" ripgrep-capf-symbol-characters "]|::)*"))
+    (concat "(?:^|[^" ripgrep-capf-symbol-characters "])(" prefix "(:?[" ripgrep-capf-symbol-characters "]|::)*)"))
    ;; Specify a directory to prevent rg from searching stdin
    " ."
-   " | awk '{print $1}' | sed " (shell-quote-argument (concat "s/^[^" ripgrep-capf-symbol-characters "]//"))
    " | sort | uniq -c | sort -rn | awk '{print $2}'"))
 
 (defun ripgrep-capf--directory ()
