@@ -30,13 +30,15 @@
 
 ;;; Code:
 
+(require 'thingatpt)
+
 (defgroup ripgrep-capf ()
   "Rg completion-at-point function."
   :group 'convenience
   :prefix "ripgrep-capf")
 
 (defcustom ripgrep-capf--rg-executable
-  (if-let ((executable (executable-find "rg")))
+  (if-let* ((executable (executable-find "rg")))
       executable
     (warn "No rg executable found in PATH.")
     "rg")
